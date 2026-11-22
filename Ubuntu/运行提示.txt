@@ -1,0 +1,53 @@
+MCChat Ubuntu 运行提示
+=======================
+
+一、准备
+  Python 3.8+ 与加密库（实验环境：Ubuntu 22.04.5，Python 3.10，
+  cryptography 3.4.8）：
+      sudo apt install python3-pip
+      pip3 install cryptography
+
+二、启动（实验时为 VMware NAT 内同一台虚拟机开 3 个实例；也可多机）
+  python3 mcchat.py --name Alice
+  python3 mcchat.py --name Bob
+  python3 mcchat.py --name Carol
+  可选参数：--iface 本机IP    --rekey 60（轮换周期 s）    --validity 120（有效期 s）
+  同机跑多个实例没有问题：程序用 SO_REUSEADDR 共用组播端口 50000，
+  每个实例有唯一的 ctrl_port，单播密钥不会落到错误实例。
+
+三、防火墙（如果开启了 ufw）
+  sudo ufw allow 50000/udp
+  sudo ufw allow 40000:60000/udp
+  （或测试期间 sudo ufw disable）
+
+四、常用命令（与 Windows 版相同）
+  /members                当前成员列表
+  直接输入文字             发送多播文本
+  /file ../测试媒体/sample.mp4      发送文件
+  /kick Carol             踢出成员（密钥轮换，Carol 只能看到密文）
+  /leave                  退出多播组（仍能发送，但收不到）
+  /join                   重新加入
+  /keyinfo                查看 epoch / 密钥指纹 / 剩余有效期
+  /quit                   退出
+
+五、验证“真的加入了多播组”（IGMP）
+  ip maddr show dev 网卡名 | grep -A2 239.255.42.99
+  抓包看报文：
+  sudo tcpdump -i 网卡名 -n 'igmp or udp port 50000'
+  应看到发往 224.0.0.22 的 IGMP v3 report，以及发往
+  239.255.42.99:50000 的 UDP 报文（文本约 100+ 字节，文件块 1109 字节）。
+  /leave 之后再执行 ip maddr，239.255.42.99 那一行会消失。
+
+六、收到的文件与播放
+  保存在 downloads/<节点名>/ 下。Linux 上收完会自动调用 xdg-open
+  调起系统默认播放器；没有播放器时可手动：ffplay 文件名。
+
+七、自动化测试
+  python3 test_driver.py
+  自动启动 3 个本地实例，跑 33 项断言（当时在 Ubuntu VM 上的
+  原始结果：33 项全部 PASS，test.wav 发送 0.909 s / 接收 0.908 s）。
+  测试音频由脚本自动生成，不需要提前准备。
+
+八、关于本目录
+  mcchat.py 与 Windows/ 里的完全相同（跨平台、零修改），改代码时
+  两边要同步。test_driver.py 是功能自动化测试。
